@@ -4,7 +4,7 @@
 >
 > **Lifeline** is a smart, dynamic assistant that reads **live weather and air-quality data** for your location, understands **who lives in your home**, and uses **Google Gemini** to turn a deterministic safety engine's decisions into a personal, plain-language, multilingual action plan, in under 10 seconds.
 
-**Live demo:** _add your Cloud Run URL here_
+**Live demo:** https://lifeline-gold-ten.vercel.app
 
 ---
 
@@ -92,7 +92,7 @@ Node.js server on Google Cloud Run (zero dependencies)
 ## Accessibility (WCAG 2.2 AA minded)
 - Semantic landmarks, skip link, labelled fieldsets/inputs, `aria-live` results, focus moved to results
 - Full keyboard use, visible focus rings, 44 px minimum touch targets
-- **Larger-text toggle**, automatic **dark mode**, `prefers-reduced-motion` and `forced-colors` support
+- Respects browser zoom and text scaling, automatic **dark mode**, `prefers-reduced-motion` and `forced-colors` support
 - Read-aloud in 13 languages for low-literacy and visually impaired users; plain-language (reading age ~12) AI output
 - Print stylesheet for a paper copy that works when phones die
 
