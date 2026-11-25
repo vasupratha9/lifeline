@@ -97,7 +97,7 @@ Node.js server on Google Cloud Run (zero dependencies)
 - Print stylesheet for a paper copy that works when phones die
 
 ## Testing
-45 automated tests using Node's built-in test runner (~98% line coverage) covering validation, the decision engine, Gemini client (mocked: key handling, schema, caching, sanitising), weather client, cache, rate limiter, fallback logic and full HTTP integration (security headers, 400/404/405/413/415/429, path traversal, ETag/304, AI-failure fallback).
+51 automated tests using Node's built-in test runner (~98% line coverage) covering validation, the decision engine, Gemini client (mocked: key handling, schema, caching, sanitising), weather client, cache, rate limiter, fallback logic and full HTTP integration (security headers, 400/404/405/413/415/429, path traversal, ETag/304, AI-failure fallback).
 
 ```bash
 npm test
@@ -123,6 +123,12 @@ gcloud run deploy lifeline \
   --set-env-vars GEMINI_API_KEY=your_key
 ```
 
+## Deploy to Vercel (alternative)
+The same code also runs as Vercel serverless functions: `api/plan.js`, `api/ask.js` and `api/health.js` share one handler built by `src/bootstrap.js`. The front-end in `public/` is served from Vercel's CDN, with the same security headers set in `vercel.json`.
+
+1. Import the GitHub repo at vercel.com/new (Framework preset: **Other**, no build command).
+2. Add the environment variable `GEMINI_API_KEY`, then click **Deploy**.
+
 ## Assumptions
 - Users have intermittent internet; the core plan works without AI and the app shell works offline.
 - Weather thresholds follow public guidance (IMD heatwave criteria, US EPA AQI bands, gale-force winds). They are deliberately conservative.
@@ -132,8 +138,11 @@ gcloud run deploy lifeline \
 
 ## Project structure
 ```
-server.js            entry point (Cloud Run ready, graceful shutdown)
+server.js            entry point for Cloud Run / Docker / local (graceful shutdown)
+api/                 Vercel serverless routes (plan, ask, health)
+vercel.json          Vercel config: static output, function limits, security headers
 src/
+  bootstrap.js       wires config + clients into the app (shared by all hosts)
   app.js             routing, security headers, body parsing, logging
   engine.js          deterministic decision engine
   knowledge.js       curated safety knowledge (data, separate from logic)
@@ -146,7 +155,7 @@ src/
   static.js          in-memory, gzip, ETag static server
   config.js          environment configuration
 public/              accessible PWA front-end (HTML, CSS, JS, service worker)
-test/                45 automated tests
+test/                51 automated tests
 ```
 
 ## License
