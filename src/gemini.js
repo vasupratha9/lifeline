@@ -86,27 +86,72 @@ function buildContext(profile, plan, conditions, place) {
   };
 }
 
-function createGeminiClient({ apiKey, model = 'gemini-2.5-flash', timeoutMs = 12000, fetchImpl = globalThis.fetch, cache = null } = {}) {
-  const enabled = Boolean(apiKey);
+const DEFAULT_MODELS = Object.freeze(['gemini-3.5-flash', 'gemini-3.5-flash-lite']);
 
-  async function generate(system, userText, schema, temperature) {
-    const response = await fetchImpl(`${API_BASE}/${encodeURIComponent(model)}:generateContent`, {
-      method: 'POST',
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: userText }] }],
-        generationConfig: { temperature, maxOutputTokens: 1200, responseMimeType: 'application/json', responseSchema: schema },
-      }),
-    });
-    if (!response.ok) throw new Error(`Gemini responded ${response.status}`);
+/** Statuses where trying the next model in the chain may succeed (retired model, quota, overload). */
+const RETRYABLE_STATUSES = new Set([404, 429, 500, 503]);
+
+class GeminiError extends Error {
+  constructor(message, { status = 0, retryable = false } = {}) {
+    super(message);
+    this.name = 'GeminiError';
+    this.status = status;
+    this.retryable = retryable;
+  }
+}
+
+/** Accept "a,b" or ["a","b"]; always returns a non-empty, de-duplicated list. */
+function parseModels(model) {
+  const list = (Array.isArray(model) ? model : String(model || '').split(','))
+    .map((m) => String(m).trim())
+    .filter((m) => /^[a-z0-9.-]{3,80}$/i.test(m));
+  return list.length ? [...new Set(list)] : [DEFAULT_MODELS[0]];
+}
+
+function createGeminiClient({ apiKey, model = DEFAULT_MODELS, timeoutMs = 12000, fetchImpl = globalThis.fetch, cache = null } = {}) {
+  const enabled = Boolean(apiKey);
+  const models = parseModels(model);
+
+  async function callModel(modelName, system, userText, schema, temperature) {
+    let response;
+    try {
+      response = await fetchImpl(`${API_BASE}/${encodeURIComponent(modelName)}:generateContent`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts: [{ text: userText }] }],
+          generationConfig: { temperature, maxOutputTokens: 2048, responseMimeType: 'application/json', responseSchema: schema },
+        }),
+      });
+    } catch (err) {
+      // Network failure or timeout: another model may still answer in time.
+      throw new GeminiError(`Gemini request failed: ${err.name}`, { retryable: true });
+    }
+    if (!response.ok) {
+      throw new GeminiError(`Gemini responded ${response.status}`, { status: response.status, retryable: RETRYABLE_STATUSES.has(response.status) });
+    }
     const data = await response.json();
     const text = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts
       ? data.candidates[0].content.parts.map((p) => p.text || '').join('')
       : '';
-    if (!text) throw new Error('Gemini returned an empty response');
+    if (!text) throw new GeminiError('Gemini returned an empty response', { retryable: true });
     return JSON.parse(text);
+  }
+
+  /** Try each configured model in order, moving on only for retryable failures. */
+  async function generate(system, userText, schema, temperature) {
+    let lastError;
+    for (const modelName of models) {
+      try {
+        return await callModel(modelName, system, userText, schema, temperature);
+      } catch (err) {
+        lastError = err;
+        if (!(err instanceof GeminiError) || !err.retryable) throw err;
+      }
+    }
+    throw lastError;
   }
 
   async function cached(kind, payload, producer) {
@@ -135,7 +180,7 @@ function createGeminiClient({ apiKey, model = 'gemini-2.5-flash', timeoutMs = 12
     });
   }
 
-  return { enabled, model, explainPlan, answer };
+  return { enabled, models, explainPlan, answer };
 }
 
-module.exports = { createGeminiClient, sanitizePlan, sanitizeAnswer, buildContext };
+module.exports = { createGeminiClient, sanitizePlan, sanitizeAnswer, buildContext, parseModels, DEFAULT_MODELS };

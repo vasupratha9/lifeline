@@ -65,7 +65,7 @@ Node.js server on Google Cloud Run (zero dependencies)
 - **Works offline** as an installable PWA; the last plan stays available without a network
 
 ## Google services used
-- **Google Gemini API** (`gemini-2.5-flash`, configurable): structured-output generation for the plan and Q&A
+- **Google Gemini API** (`gemini-3.5-flash`, auto-fallback to `gemini-3.5-flash-lite` if a model is busy or retired): structured-output generation for the plan and Q&A
 - **Google Cloud Run**: serverless hosting, scale-to-zero, HTTPS
 - **Google Cloud Build**: builds the container from source on deploy
 - **Google Cloud Logging**: the server writes structured JSON logs (`severity`, `httpRequest`) that Cloud Logging parses natively

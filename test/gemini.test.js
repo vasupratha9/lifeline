@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createGeminiClient, sanitizePlan, sanitizeAnswer, buildContext } = require('../src/gemini');
+const { createGeminiClient, sanitizePlan, sanitizeAnswer, buildContext, parseModels, DEFAULT_MODELS } = require('../src/gemini');
 const { TtlCache } = require('../src/cache');
 const engine = require('../src/engine');
 const { validateProfile } = require('../src/validate');
@@ -87,4 +87,31 @@ test('sanitizePlan caps lengths and list sizes and rejects incomplete output', (
 test('sanitizeAnswer validates shape and coerces urgent to boolean', () => {
   assert.deepEqual(sanitizeAnswer({ answer: ' ok ', urgent: 'yes' }), { answer: 'ok', urgent: false });
   assert.throws(() => sanitizeAnswer({ answer: '' }));
+});
+
+test('falls back to the next model when one is retired or overloaded', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    if (url.includes('/old-model:')) return { ok: false, status: 404, json: async () => ({}) };
+    return fakeFetch(goodPlan)(url);
+  };
+  const client = createGeminiClient({ apiKey: 'k', model: 'old-model,new-model', fetchImpl });
+  const result = await client.explainPlan(profile, plan, null, null);
+  assert.equal(result.summary, goodPlan.summary);
+  assert.equal(calls.length, 2);
+  assert.ok(calls[1].includes('/new-model:'));
+});
+
+test('does not retry on non-retryable errors such as a bad key', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => { calls.push(url); return { ok: false, status: 403, json: async () => ({}) }; };
+  const client = createGeminiClient({ apiKey: 'k', model: ['a-model', 'b-model'], fetchImpl });
+  await assert.rejects(client.explainPlan(profile, plan, null, null), /403/);
+  assert.equal(calls.length, 1);
+});
+
+test('parseModels cleans the model list and has a safe default', () => {
+  assert.deepEqual(parseModels(' x-1 , x-1, bad/model, y-2 '), ['x-1', 'y-2']);
+  assert.deepEqual(parseModels(''), [DEFAULT_MODELS[0]]);
 });

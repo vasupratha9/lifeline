@@ -8,7 +8,6 @@
 (function lifeline() {
   const STORAGE_KEY = 'lifeline:last';
   const CHECKS_KEY = 'lifeline:checks';
-  const TEXT_KEY = 'lifeline:largeText';
   const REQUEST_TIMEOUT_MS = 30000;
   const TOTAL_STEPS = 3;
   const GAUGE_CIRCUMFERENCE = 2 * Math.PI * 50;
@@ -58,7 +57,6 @@
     answer: $('answer'),
     location: $('location'),
     useLocation: $('use-location'),
-    textSize: $('text-size'),
     netStatus: $('net-status'),
     sosLink: $('sos-link'),
     sosNumber: $('sos-number'),
@@ -474,12 +472,7 @@
     );
   }
 
-  /* ---------- accessibility + network ---------- */
-  function applyTextSize(large) {
-    document.documentElement.classList.toggle('large-text', large);
-    els.textSize.setAttribute('aria-pressed', String(large));
-  }
-
+  /* ---------- network ---------- */
   function updateNetwork() {
     els.netStatus.textContent = navigator.onLine ? '' : 'Offline: last plan available';
   }
@@ -512,15 +505,9 @@
   $('read-aloud').addEventListener('click', (e) => readAloud(e.currentTarget));
   $('print-plan').addEventListener('click', () => window.print());
   $('share-plan').addEventListener('click', (e) => sharePlan(e.currentTarget));
-  els.textSize.addEventListener('click', () => {
-    const large = !document.documentElement.classList.contains('large-text');
-    applyTextSize(large);
-    store.set(TEXT_KEY, large);
-  });
   window.addEventListener('online', updateNetwork);
   window.addEventListener('offline', updateNetwork);
 
-  applyTextSize(store.get(TEXT_KEY, false));
   updateNetwork();
   showStep(1, false);
 

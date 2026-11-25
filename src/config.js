@@ -14,8 +14,8 @@ function loadConfig(env = process.env) {
   return Object.freeze({
     port: num(env.PORT, 8080),
     geminiApiKey: env.GEMINI_API_KEY || '',
-    geminiModel: env.GEMINI_MODEL || 'gemini-2.5-flash',
-    upstreamTimeoutMs: num(env.UPSTREAM_TIMEOUT_MS, 12000),
+    geminiModel: env.GEMINI_MODEL || 'gemini-3.5-flash,gemini-3.5-flash-lite',
+    upstreamTimeoutMs: num(env.UPSTREAM_TIMEOUT_MS, 20000),
     maxBodyBytes: num(env.MAX_BODY_BYTES, 16 * 1024),
     rateLimitWindowMs: num(env.RATE_LIMIT_WINDOW_MS, 60 * 1000),
     rateLimitMax: num(env.RATE_LIMIT_MAX, 30),

@@ -57,7 +57,6 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { font-size: var(--base-size); scroll-behavior: smooth; }
-html.large-text { --base-size: 1.18rem; }
 
 body {
   margin: 0;
@@ -439,7 +438,6 @@ input[type="text"]:focus, input[type="number"]:focus, select:focus {
   .form-card { padding: 20px 16px; }
   .stepper { width: 100%; justify-content: space-between; }
   .step-dot { padding-right: 8px; font-size: 0.8rem; }
-  #text-size .label-long { display: none; }
   .status-card { padding: 20px; }
   .gauge { width: 112px; height: 112px; }
   .form-nav .btn { flex: 1; }
