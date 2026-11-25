@@ -1,0 +1,12 @@
+{
+  "name": "Lifeline – AI Disaster Readiness Assistant",
+  "short_name": "Lifeline",
+  "description": "Personalised, explainable emergency plans from live weather, air quality and your household's needs.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f5f2",
+  "theme_color": "#b42318",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

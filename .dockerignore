@@ -1,0 +1,11 @@
+.git
+.github
+node_modules
+test
+coverage
+*.md
+.env
+.env.*
+Dockerfile
+.dockerignore
+.gcloudignore

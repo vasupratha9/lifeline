@@ -1,0 +1,16 @@
+{
+  "name": "lifeline",
+  "version": "1.0.0",
+  "description": "Lifeline - an AI disaster-readiness assistant that turns live weather, household context and Google Gemini into a personalised, explainable safety plan.",
+  "main": "server.js",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage"
+  }
+}
