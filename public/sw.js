@@ -2,8 +2,8 @@
 
 /* Offline support: cache the app shell so Lifeline opens even without a network.
    API responses are never cached here; the last plan lives in localStorage. */
-const CACHE = 'lifeline-v1';
-const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/icon.svg', '/manifest.webmanifest'];
+const CACHE = 'lifeline-v2';
+const SHELL = ['/', '/index.html', '/styles.css?v=2', '/app.js?v=2', '/icon.svg', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));

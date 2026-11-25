@@ -52,7 +52,9 @@ Node.js server on Google Cloud Run (zero dependencies)
 **Hybrid AI design (key idea):** Safety-critical content comes from a tested, deterministic engine. Gemini **cannot remove or contradict** it; it personalises, prioritises and explains. This gives the warmth and language coverage of an LLM with the reliability that emergencies demand.
 
 ### Features
-- **Prepare ahead** and **Emergency now** modes
+- 3-step guided form; **Emergency now** skips straight to life-safety steps
+- Results dashboard: colour-coded risk card, animated readiness gauge, live-condition tiles, checklist progress bar
+- Header **SOS** button that updates to the local emergency number
 - Auto hazard detection from live conditions, or manual choice of 7 hazards
 - Personalised, prioritised, tickable checklist (progress saved on the device)
 - Readiness score (0–100) with exact supply quantities
@@ -68,6 +70,7 @@ Node.js server on Google Cloud Run (zero dependencies)
 - **Google Cloud Build**: builds the container from source on deploy
 - **Google Cloud Logging**: the server writes structured JSON logs (`severity`, `httpRequest`) that Cloud Logging parses natively
 - **Google Maps** (URL API): nearby emergency services, no key needed
+- **Google Fonts**: Plus Jakarta Sans, allowed through a narrow CSP exception
 
 ## Security
 - API key kept **server-side only**, sent in the `x-goog-api-key` header (never in URLs or the browser)

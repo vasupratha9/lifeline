@@ -10,19 +10,31 @@
   const CHECKS_KEY = 'lifeline:checks';
   const TEXT_KEY = 'lifeline:largeText';
   const REQUEST_TIMEOUT_MS = 30000;
+  const TOTAL_STEPS = 3;
+  const GAUGE_CIRCUMFERENCE = 2 * Math.PI * 50;
+
+  const HAZARD_ICONS = { general: '🧰', flood: '🌊', heatwave: '🌡️', cyclone: '🌀', earthquake: '🏚️', wildfire: '🔥', air_pollution: '😷' };
+  const NEXT_LABELS = { 1: 'Next: household →', 2: 'Next: supplies →' };
+  const SPEECH_LANG = { en: 'en-IN', hi: 'hi-IN', ta: 'ta-IN', te: 'te-IN', bn: 'bn-IN', mr: 'mr-IN', kn: 'kn-IN', ml: 'ml-IN', gu: 'gu-IN', es: 'es-ES', fr: 'fr-FR', pt: 'pt-BR', ar: 'ar-SA' };
 
   const $ = (id) => document.getElementById(id);
   const els = {
     form: $('profile-form'),
     submit: $('submit'),
+    next: $('next-btn'),
+    back: $('back-btn'),
     formError: $('form-error'),
     results: $('results'),
     resultsTitle: $('results-title'),
     banner: $('emergency-banner'),
+    statusCard: $('status-card'),
+    hazardIcon: $('hazard-icon'),
     hazardLabel: $('hazard-label'),
+    placeName: $('place-name'),
     severity: $('severity-badge'),
+    gauge: $('gauge'),
+    gaugeFill: $('gauge-fill'),
     score: $('readiness-score'),
-    meter: $('readiness-meter'),
     readinessLabel: $('readiness-label'),
     conditions: $('conditions'),
     aiCard: $('ai-card'),
@@ -35,6 +47,7 @@
     immediateList: $('immediate-list'),
     checklist: $('checklist'),
     progress: $('checklist-progress'),
+    progressBar: $('progress-bar'),
     decisions: $('decisions'),
     review: $('review-advice'),
     mapLinks: $('map-links'),
@@ -47,11 +60,14 @@
     useLocation: $('use-location'),
     textSize: $('text-size'),
     netStatus: $('net-status'),
+    sosLink: $('sos-link'),
+    sosNumber: $('sos-number'),
   };
 
   let lastProfile = null;
   let lastResult = null;
   let coords = null;
+  let currentStep = 1;
 
   /* ---------- storage helpers (storage may be unavailable) ---------- */
   const store = {
@@ -76,11 +92,9 @@
     (children || []).forEach((c) => node.append(c));
     return node;
   }
-  function fill(list, items) {
-    list.replaceChildren(...items);
-  }
+  const fill = (list, items) => list.replaceChildren(...items);
 
-  /* ---------- form ---------- */
+  /* ---------- form data ---------- */
   function readProfile() {
     const data = new FormData(els.form);
     const num = (name) => Number(data.get(name));
@@ -88,7 +102,7 @@
       mode: data.get('mode'),
       hazard: data.get('hazard'),
       location: String(data.get('location') || '').trim(),
-      coords: coords,
+      coords,
       household: { adults: num('adults'), children: num('children'), elderly: num('elderly'), pets: num('pets') },
       housing: data.get('housing'),
       hasVehicle: $('hasVehicle').checked,
@@ -98,9 +112,12 @@
     };
   }
 
-  function validateProfile(p) {
+  function locationProblem(p) {
+    return !p.location && !p.coords ? 'Please enter your city or tap "Use my location" so Lifeline can check live conditions.' : '';
+  }
+
+  function householdProblem(p) {
     const counts = p.household;
-    if (!p.location && !p.coords) return 'Please enter your city or use your location so Lifeline can check live conditions.';
     if (!Number.isInteger(counts.adults) || counts.adults < 1 || counts.adults > 20) return 'Adults must be between 1 and 20.';
     for (const key of ['children', 'elderly', 'pets']) {
       if (!Number.isInteger(counts[key]) || counts[key] < 0 || counts[key] > 20) return 'Household numbers must be between 0 and 20.';
@@ -113,6 +130,66 @@
     els.formError.hidden = !message;
   }
 
+  /* ---------- wizard ---------- */
+  function isEmergency() {
+    return els.form.querySelector('input[name="mode"]:checked').value === 'emergency';
+  }
+
+  function updateNav() {
+    const last = currentStep === TOTAL_STEPS;
+    els.back.hidden = currentStep === 1;
+    els.next.hidden = last;
+    els.submit.hidden = !last;
+    if (currentStep === 1 && isEmergency()) {
+      els.next.textContent = 'Get emergency steps now →';
+    } else if (!last) {
+      els.next.textContent = NEXT_LABELS[currentStep];
+    }
+    document.querySelectorAll('[data-step-dot]').forEach((dot) => {
+      const n = Number(dot.dataset.stepDot);
+      dot.classList.toggle('is-active', n === currentStep);
+      dot.classList.toggle('is-done', n < currentStep);
+      if (n === currentStep) dot.setAttribute('aria-current', 'step');
+      else dot.removeAttribute('aria-current');
+    });
+  }
+
+  function showStep(n, focus = true) {
+    currentStep = n;
+    document.querySelectorAll('[data-step]').forEach((step) => {
+      step.hidden = Number(step.dataset.step) !== n;
+    });
+    updateNav();
+    if (focus) {
+      const title = els.form.querySelector(`[data-step="${n}"] .step-title`);
+      if (title) title.focus();
+    }
+  }
+
+  function onNext() {
+    const profile = readProfile();
+    const problem = currentStep === 1 ? locationProblem(profile) : householdProblem(profile);
+    showError(problem);
+    if (problem) {
+      if (currentStep === 1) els.location.focus();
+      return;
+    }
+    if (currentStep === 1 && isEmergency()) {
+      els.form.requestSubmit(els.submit);
+      return;
+    }
+    showStep(currentStep + 1);
+  }
+
+  function onStepButton(event) {
+    const button = event.target.closest('.step-btn');
+    if (!button) return;
+    const input = $(button.dataset.target);
+    const next = Number(input.value || 0) + Number(button.dataset.delta);
+    input.value = String(Math.min(Number(input.max), Math.max(Number(input.min), next)));
+  }
+
+  /* ---------- network ---------- */
   async function postJson(url, body) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -144,13 +221,14 @@
   async function onSubmit(event) {
     event.preventDefault();
     const profile = readProfile();
-    const problem = validateProfile(profile);
+    const problem = locationProblem(profile) || householdProblem(profile);
     showError(problem);
     if (problem) {
-      els.location.focus();
+      showStep(locationProblem(profile) ? 1 : 2);
       return;
     }
-    setBusy(els.submit, true, 'Checking live conditions…');
+    const button = els.submit.hidden ? els.next : els.submit;
+    setBusy(button, true, 'Checking live conditions…');
     els.results.setAttribute('aria-busy', 'true');
     try {
       const result = await postJson('/api/plan', profile);
@@ -169,43 +247,50 @@
         showError(err.name === 'AbortError' ? 'This is taking too long. Please try again.' : err.message);
       }
     } finally {
-      setBusy(els.submit, false);
+      setBusy(button, false);
       els.results.setAttribute('aria-busy', 'false');
     }
   }
 
   /* ---------- rendering ---------- */
-  function renderConditions(place, c) {
+  function metric(icon, label, value) {
+    return el('li', { className: 'metric' }, [
+      el('span', { className: 'metric-label', text: `${icon} ${label}` }),
+      el('span', { className: 'metric-value', text: value }),
+    ]);
+  }
+
+  function renderConditions(c) {
     const items = [];
-    if (place) items.push(el('li', { text: `📍 ${place.name}` }));
     if (c) {
-      if (c.temperature !== null) {
-        const feels = c.apparentTemperature !== null ? ` · feels ${Math.round(c.apparentTemperature)}°C` : '';
-        items.push(el('li', { text: `🌡 Now ${Math.round(c.temperature)}°C${feels}` }));
-      }
-      if (c.maxTemp !== null) items.push(el('li', { text: `☀ Peak next 3 days: ${Math.round(c.maxTemp)}°C` }));
-      if (c.precip3d !== null) items.push(el('li', { text: `🌧 Rain next 3 days: ${Math.round(c.precip3d)} mm` }));
-      if (c.maxWind !== null) items.push(el('li', { text: `💨 Max wind: ${Math.round(c.maxWind)} km/h` }));
-      if (c.aqi !== null) items.push(el('li', { text: `🫁 Air quality (US AQI): ${Math.round(c.aqi)}` }));
+      if (c.temperature !== null) items.push(metric('🌡', 'Now', `${Math.round(c.temperature)}°C`));
+      if (c.apparentTemperature !== null) items.push(metric('🥵', 'Feels like', `${Math.round(c.apparentTemperature)}°C`));
+      if (c.maxTemp !== null) items.push(metric('☀️', 'Peak (3 days)', `${Math.round(c.maxTemp)}°C`));
+      if (c.precip3d !== null) items.push(metric('🌧', 'Rain (3 days)', `${Math.round(c.precip3d)} mm`));
+      if (c.maxWind !== null) items.push(metric('💨', 'Max wind', `${Math.round(c.maxWind)} km/h`));
+      if (c.aqi !== null) items.push(metric('🫁', 'Air quality (AQI)', String(Math.round(c.aqi))));
     }
-    if (!items.length || !c) items.push(el('li', { className: 'hint', text: 'Live data unavailable. Plan is based on your answers.' }));
+    if (!items.length) items.push(el('li', { className: 'metric-empty', text: 'Live data unavailable. The plan is based on your answers.' }));
     fill(els.conditions, items);
   }
 
   function renderAi(ai, source) {
     els.aiCard.hidden = !ai;
     if (!ai) return;
-    els.aiSource.textContent = source === 'gemini' ? 'by Google Gemini' : '';
+    els.aiSource.textContent = source === 'gemini' ? 'Google Gemini' : '';
+    els.aiSource.hidden = source !== 'gemini';
     els.aiSummary.textContent = ai.summary;
     fill(els.aiActions, ai.topActions.map((a) => el('li', null, [el('strong', { text: a.title }), document.createTextNode(` ${a.detail}`)])));
     fill(els.aiNotes, (ai.householdNotes || []).map((n) => el('li', { text: n })));
     els.aiReassurance.textContent = ai.reassurance || '';
+    els.aiReassurance.hidden = !ai.reassurance;
   }
 
   function updateProgress() {
     const boxes = els.checklist.querySelectorAll('input[type="checkbox"]');
     const done = [...boxes].filter((b) => b.checked).length;
     els.progress.textContent = `${done} of ${boxes.length} done`;
+    els.progressBar.style.width = boxes.length ? `${Math.round((done / boxes.length) * 100)}%` : '0%';
   }
 
   function renderChecklist(items) {
@@ -222,7 +307,7 @@
       const text = el('span', null, [
         el('span', { className: `prio prio-${item.priority}`, text: item.priority }),
         el('span', { className: 'item-text', text: item.text }),
-        el('span', { className: 'why', text: item.why }),
+        el('span', { className: 'why-text', text: item.why }),
       ]);
       return el('li', null, [el('label', { for: `chk-${item.id}` }, [box, text])]);
     }));
@@ -232,44 +317,62 @@
   function renderMapLinks(place, plan) {
     const near = place ? place.name : 'me';
     const queries = [
-      ['Hospitals', `hospital near ${near}`],
-      ['Relief shelters', `relief shelter near ${near}`],
-      ['Pharmacies', `pharmacy open now near ${near}`],
-      ['Police / fire station', `fire station near ${near}`],
+      ['🏥', 'Hospitals', `hospital near ${near}`],
+      ['⛺', 'Relief shelters', `relief shelter near ${near}`],
+      ['💊', 'Pharmacies', `pharmacy open now near ${near}`],
+      ['🚒', 'Fire stations', `fire station near ${near}`],
     ];
-    if (plan.hazard === 'heatwave') queries.push(['Cooling centres', `cooling centre near ${near}`]);
-    fill(els.mapLinks, queries.map(([label, q]) => el('a', {
+    if (plan.hazard === 'heatwave') queries.push(['❄️', 'Cooling centres', `cooling centre near ${near}`]);
+    fill(els.mapLinks, queries.map(([icon, label, q]) => el('a', {
       href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`,
       target: '_blank',
       rel: 'noopener noreferrer',
-      text: `${label} ↗`,
       'aria-label': `${label} on Google Maps (opens in a new tab)`,
-    })));
+    }, [el('span', { 'aria-hidden': 'true', text: icon }), document.createTextNode(`${label} ↗`)])));
+  }
+
+  function renderGauge(readiness) {
+    const score = Math.max(0, Math.min(100, readiness.score));
+    els.score.textContent = String(score);
+    els.gauge.setAttribute('aria-label', `Readiness score ${score} out of 100: ${readiness.label}`);
+    // Animate from empty on the next frame so the transition is visible.
+    els.gaugeFill.setAttribute('stroke-dashoffset', String(GAUGE_CIRCUMFERENCE));
+    requestAnimationFrame(() => {
+      els.gaugeFill.setAttribute('stroke-dashoffset', String(GAUGE_CIRCUMFERENCE * (1 - score / 100)));
+    });
+  }
+
+  function setSos(number) {
+    els.sosNumber.textContent = number;
+    els.sosLink.href = `tel:${number}`;
+    els.sosLink.setAttribute('aria-label', `Call emergency number ${number}`);
   }
 
   function render(result) {
     const { plan, place, conditions, ai, source } = result;
     els.results.hidden = false;
     els.askSection.hidden = false;
+    setSos(plan.emergency.number);
 
     const urgent = plan.mode === 'emergency' || plan.severity === 'critical';
     els.banner.hidden = !urgent;
     if (urgent) {
       els.banner.replaceChildren(
-        document.createTextNode('If anyone is in danger, call '),
-        el('a', { href: `tel:${plan.emergency.number}`, text: plan.emergency.number }),
-        document.createTextNode(' now.'),
+        el('span', { text: 'If anyone is in danger, call now' }),
+        el('a', { href: `tel:${plan.emergency.number}`, text: `📞 ${plan.emergency.number}` }),
       );
     }
 
+    els.statusCard.className = `status-card sev-${plan.severity}`;
+    els.hazardIcon.textContent = HAZARD_ICONS[plan.hazard] || '🧰';
     els.hazardLabel.textContent = plan.hazardLabel;
+    els.placeName.textContent = place ? `· ${place.name}` : '';
     els.severity.textContent = `${plan.severity} severity`;
-    els.severity.className = `badge sev-${plan.severity}`;
-    els.score.textContent = String(plan.readiness.score);
-    els.meter.value = plan.readiness.score;
-    els.readinessLabel.textContent = `${plan.readiness.label}. Water target: ${plan.supplies.waterLitres} L.`;
+    els.severity.className = 'badge';
+    renderGauge(plan.readiness);
+    els.readinessLabel.textContent = `${plan.readiness.label} · Store ${plan.supplies.waterLitres} litres of water for your household`;
 
-    renderConditions(place, conditions);
+    renderConditions(conditions);
     renderAi(ai, source);
 
     els.immediateCard.hidden = plan.immediateActions.length === 0;
@@ -280,7 +383,8 @@
     els.review.textContent = plan.reviewAdvice;
     renderMapLinks(place, plan);
 
-    els.resultsTitle.focus();
+    els.results.scrollIntoView({ block: 'start' });
+    els.resultsTitle.focus({ preventScroll: true });
   }
 
   /* ---------- plan as plain text (read aloud / share) ---------- */
@@ -295,8 +399,6 @@
     return lines.join('\n');
   }
 
-  const SPEECH_LANG = { en: 'en-IN', hi: 'hi-IN', ta: 'ta-IN', te: 'te-IN', bn: 'bn-IN', mr: 'mr-IN', kn: 'kn-IN', ml: 'ml-IN', gu: 'gu-IN', es: 'es-ES', fr: 'fr-FR', pt: 'pt-BR', ar: 'ar-SA' };
-
   function readAloud(button) {
     if (!('speechSynthesis' in window)) {
       button.textContent = 'Read aloud not supported';
@@ -304,15 +406,15 @@
     }
     if (speechSynthesis.speaking) {
       speechSynthesis.cancel();
-      button.textContent = 'Read plan aloud';
+      button.textContent = '🔊 Read plan aloud';
       return;
     }
     const utterance = new SpeechSynthesisUtterance(planText());
     utterance.lang = SPEECH_LANG[(lastProfile && lastProfile.language) || 'en'] || 'en-IN';
     utterance.rate = 0.95;
-    utterance.onend = () => { button.textContent = 'Read plan aloud'; };
+    utterance.onend = () => { button.textContent = '🔊 Read plan aloud'; };
     speechSynthesis.speak(utterance);
-    button.textContent = 'Stop reading';
+    button.textContent = '⏹ Stop reading';
   }
 
   async function sharePlan(button) {
@@ -320,11 +422,11 @@
     try {
       if (navigator.share) await navigator.share({ title: 'My Lifeline plan', text });
       else await navigator.clipboard.writeText(text);
-      button.textContent = navigator.share ? 'Shared' : 'Copied!';
+      button.textContent = navigator.share ? '✓ Shared' : '✓ Copied!';
     } catch {
       button.textContent = 'Could not copy';
     }
-    setTimeout(() => { button.textContent = 'Copy plan to share'; }, 2500);
+    setTimeout(() => { button.textContent = '🔗 Copy plan to share'; }, 2500);
   }
 
   /* ---------- ask ---------- */
@@ -365,7 +467,7 @@
         showError('');
       },
       () => {
-        els.useLocation.textContent = 'Use my location';
+        els.useLocation.textContent = '◎ Use my location';
         showError('Could not get your location. Please type your city instead.');
       },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 },
@@ -379,14 +481,34 @@
   }
 
   function updateNetwork() {
-    els.netStatus.textContent = navigator.onLine ? '' : 'Offline: your last plan is still available';
+    els.netStatus.textContent = navigator.onLine ? '' : 'Offline: last plan available';
   }
 
   /* ---------- init ---------- */
   els.form.addEventListener('submit', onSubmit);
-  els.askForm.addEventListener('submit', onAsk);
+  els.form.addEventListener('click', onStepButton);
+  els.form.addEventListener('change', (e) => { if (e.target.name === 'mode') updateNav(); });
+  els.next.addEventListener('click', onNext);
+  els.back.addEventListener('click', () => { showError(''); showStep(currentStep - 1); });
+  els.location.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); onNext(); } });
+  els.location.addEventListener('input', () => {
+    coords = null;
+    els.useLocation.textContent = '◎ Use my location';
+    els.useLocation.removeAttribute('aria-pressed');
+  });
   els.useLocation.addEventListener('click', useMyLocation);
-  els.location.addEventListener('input', () => { coords = null; els.useLocation.textContent = 'Use my location'; els.useLocation.removeAttribute('aria-pressed'); });
+  els.askForm.addEventListener('submit', onAsk);
+  $('suggestions').addEventListener('click', (e) => {
+    const chip = e.target.closest('.suggestion');
+    if (!chip) return;
+    els.question.value = chip.textContent;
+    els.askForm.requestSubmit();
+  });
+  $('edit-plan').addEventListener('click', () => {
+    showStep(1, false);
+    els.form.scrollIntoView({ block: 'start' });
+    els.form.querySelector('[data-step="1"] .step-title').focus({ preventScroll: true });
+  });
   $('read-aloud').addEventListener('click', (e) => readAloud(e.currentTarget));
   $('print-plan').addEventListener('click', () => window.print());
   $('share-plan').addEventListener('click', (e) => sharePlan(e.currentTarget));
@@ -400,12 +522,14 @@
 
   applyTextSize(store.get(TEXT_KEY, false));
   updateNetwork();
+  showStep(1, false);
 
   const cached = store.get(STORAGE_KEY, null);
   if (cached && cached.result && cached.result.plan) {
     lastProfile = cached.profile;
     lastResult = cached.result;
     if (cached.profile && cached.profile.location) els.location.value = cached.profile.location;
+    setSos(cached.result.plan.emergency.number);
   }
 
   if ('serviceWorker' in navigator) {
